@@ -1,15 +1,16 @@
 extern crate lmdb_rs as lmdb;
 
-
 use std::path::Path;
 use lmdb::{EnvBuilder, DbFlags};
-use lmdb::core::Environment;
+use lmdb::core::{Environment, MdbResult};
+use lmdb::traits::FromMdbValue;
 
 pub type DbState = Option<DB>;
 
 pub struct DB {
     env: Environment
 }
+
 
 impl DB {
     pub fn new(p: &Path) -> DB {
@@ -18,7 +19,7 @@ impl DB {
         }
     }
 
-    pub fn set(&self, key: &str, val: &str) {
+    pub fn set(&self, key: &str, val: &str) -> MdbResult<()> {
         let db_handle = self.env.get_default_db(DbFlags::empty()).unwrap();
         let txn = self.env.new_transaction().unwrap();
         {
@@ -29,16 +30,13 @@ impl DB {
         // Note: `commit` is choosen to be explicit as
         // in case of failure it is responsibility of
         // the client to handle the error
-        match txn.commit() {
-            Err(_) => panic!("Failed to commit!"),
-            Ok(_) => ()
-        }
+        return txn.commit();
     }
 
-    pub fn get(&self, key: &str) -> &str {
+    pub fn get<V: FromMdbValue>(&self, key: &str) -> MdbResult<V> {
         let db_handle = self.env.get_default_db(DbFlags::empty()).unwrap();
         let reader = self.env.get_reader().unwrap();
         let db = reader.bind(&db_handle);
-        return db.get::<&str>(&key).unwrap();
+        return db.get(&key);
     }
 }

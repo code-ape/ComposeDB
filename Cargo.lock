@@ -2,7 +2,7 @@
 name = "compose_db"
 version = "0.1.0"
 dependencies = [
- "lmdb-rs 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lmdb-rs 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "bitflags"
-version = "0.1.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -33,10 +33,10 @@ dependencies = [
 
 [[package]]
 name = "lmdb-rs"
-version = "0.4.4"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "bitflags 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bitflags 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "liblmdb-sys 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
