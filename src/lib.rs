@@ -3,6 +3,7 @@ extern crate lmdb_rs as lmdb;
 mod db;
 mod state;
 mod people;
+mod data_interface;
 
 use state::State;
 use db::DB;
