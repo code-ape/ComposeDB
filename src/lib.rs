@@ -4,6 +4,8 @@ mod db;
 mod state;
 mod people;
 mod data_interface;
+mod blob;
+mod type_registry;
 
 use state::State;
 use db::DB;
