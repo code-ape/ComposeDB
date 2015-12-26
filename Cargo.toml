@@ -11,5 +11,10 @@ rustc-serialize = "*"
 
 
 [[bin]]
-name = "combosedb_server"
-path = "src/server.rs"
+name = "composedb_bare"
+path = "src/bare_build.rs"
+
+
+[[bin]]
+name = "composedb_simple"
+path = "src/simple_build.rs"

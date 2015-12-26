@@ -1,14 +1,10 @@
 extern crate lmdb_rs as lmdb;
 
 mod db;
-mod state;
-mod people;
-mod data_interface;
-mod blob;
-mod type_registry;
+mod db_core;
 
-use state::State;
-use db::DB;
+use db::state::State;
+use db_core::db::DB;
 
 fn try_me() {
     println!("Starting ComposeDB");

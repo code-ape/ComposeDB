@@ -1,4 +1,4 @@
-use data_interface::ToBytes;
+use db_core::data_interface::ToBytes;
 
 pub struct Person<'a> {
     names: Names,
