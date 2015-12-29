@@ -4,6 +4,7 @@ use std::sync::mpsc::{channel, sync_channel, SyncSender, Sender, Receiver};
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
 use std::thread;
+use std::time::Duration;
 
 struct WorkerPool {
     workers: Vec<Worker>,
@@ -31,6 +32,24 @@ impl WorkerPool {
         self.running.load(Ordering::AcqRel)
     }
 
+    fn worker_has_opening(&self) -> bool {
+        match self.worker_with_opening() {
+            Some(_) => true,
+            None => false
+        }
+    }
+
+    fn worker_with_opening(&self) -> Option<usize> {
+        let mut counter : usize = 0;
+        for worker in &self.workers {
+            if worker.get_queue_availability() > 0 {
+                return Some(counter);
+            }
+            counter += 1;
+        }
+        None
+    }
+
     pub fn run(&mut self) -> Result<(), &'static str> {
         println!("Attempting to start workers.");
 
@@ -48,10 +67,13 @@ impl WorkerPool {
 
 
         loop {
-            let worker_slots: Vec<(usize, usize)> = Vec::new();
+            let mut worker_slots: Vec<(usize, usize)> = Vec::new(); // TODO: allow this to be reordered
             let mut counter : usize = 0;
+            let mut total_slots : usize = 0;
             for worker in &self.workers {
-                worker_slots.push(( counter, worker.get_queue_availability() ));
+                let num_slots = worker.get_queue_availability();
+                total_slots += num_slots;
+                worker_slots.push(( counter, num_slots ));
                 counter += 1;
             }
 
@@ -60,9 +82,54 @@ impl WorkerPool {
                 Ok(x) => x,
                 RecvErr => break
             };
-            queue_available.fetch_add(1, Ordering::SeqCst);
 
-            j.chan.send(j.number*j.number);
+            match total_slots {
+                0 => {
+                    let mut keep_looping = true;
+                    let mut worker_num : usize = 0;
+                    while keep_looping {
+                        match self.worker_with_opening() {
+                            Some(x) => {
+                                worker_num = x;
+                                keep_looping = false;
+                            },
+                            None => {
+                                thread::sleep(Duration::from_millis(1));
+                            }
+                        }
+
+                    }
+                    let ref worker = self.workers[worker_num];
+                    worker.give_job(j).unwrap();
+                },
+                1 => {
+                    let (worker_num, _) = worker_slots[0];
+                    let ref worker = self.workers[worker_num];
+                    worker.give_job(j);
+                },
+                x => {
+                    let mut jobs : Vec<Job> = Vec::new();
+                    jobs.push(j);
+                    for i in 0..(total_slots-1) {
+                        match self.recv_queue.try_recv() {
+                            Ok(x) => jobs.push(x),
+                            Err(_) => break
+                        }
+                    }
+
+                    for (worker_num, num_available) in worker_slots {
+                        let ref worker = self.workers[worker_num];
+                        for _ in 0..num_available {
+                            worker.give_job(jobs.pop().unwrap());
+                        }
+                    }
+
+
+                }
+            }
+
+
+
         }
         println!("Pool head ended");
 
@@ -101,6 +168,7 @@ impl Worker {
         }
     }
 
+    // TODO: how do we reclaim queue if worker dies?
     fn start(&mut self) -> Result<(), &'static str> {
         if self.is_running() {
             return Err("Worker already running");
@@ -157,6 +225,7 @@ impl Worker {
         }
         let q = self.get_queue_in();
         q.send(j);
+        self.queue_available.fetch_sub(1, Ordering::SeqCst);
         Ok(())
     }
 }
