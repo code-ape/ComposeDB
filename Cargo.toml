@@ -1,5 +1,5 @@
 [package]
-name = "compose_db"
+name = "composedb"
 version = "0.1.0"
 authors = ["ferris"]
 
@@ -8,13 +8,18 @@ lmdb-rs = "0.5.0"
 iron = "*"
 router = "*"
 rustc-serialize = "*"
+log = "*"
+env_logger = "*"
 
+[lib]
+name = "composedb"
+path = "src/lib.rs"
 
 [[bin]]
 name = "composedb_bare"
-path = "src/bare_build.rs"
+path = "example/bare_build.rs"
 
 
 [[bin]]
 name = "composedb_simple"
-path = "src/simple_build.rs"
+path = "example/simple_build.rs"

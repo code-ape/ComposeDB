@@ -1,7 +1,9 @@
+
 use std::collections::VecDeque;
 use std::sync::{Mutex, Arc, Condvar};
 use std::thread;
 
+use env_logger;
 use iron::prelude::*;
 use router::Router;
 
@@ -9,7 +11,8 @@ use server::routes::{get_value,set_value};
 use server::jobs::Job;
 
 
-pub fn run_server() {
+pub fn run() {
+    env_logger::init().unwrap();
 
     let queue : Arc<Mutex<VecDeque<Job>>> = Arc::new(Mutex::new(VecDeque::new()));
     let signal : Arc<Condvar> = Arc::new(Condvar::new());
@@ -22,7 +25,7 @@ pub fn run_server() {
         let signal_clone = signal.clone();
 
         thread::spawn(move || {
-            println!("Starting worker {}", i);
+            debug!("Starting worker {}", i);
             let mut counter = 0;
             let mut j: Job;
             loop {
@@ -35,7 +38,7 @@ pub fn run_server() {
                     };
                     break;
                 }
-                println!("Worker {}: received job {}", i, counter);
+                debug!("Worker {}: received job {}", i, counter);
                 let new_value = j.number + 100;
                 thread::sleep_ms(10000);
                 j.chan.send(new_value).unwrap();
@@ -55,7 +58,7 @@ pub fn run_server() {
     router.get("/json", move |r: &mut Request| get_value(r, &queue_2, &signal_2));
     router.post("/json/set", move |r: &mut Request| set_value(r, &queue_3, &signal_3));
 
-    println!("Starting ComposeDB.");
+    info!("Starting ComposeDB.");
     Iron::new(router).http("localhost:3000").unwrap();
 
 }

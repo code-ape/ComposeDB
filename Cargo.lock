@@ -1,9 +1,11 @@
 [root]
-name = "compose_db"
+name = "composedb"
 version = "0.1.0"
 dependencies = [
+ "env_logger 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "lmdb-rs 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "router 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -47,6 +49,15 @@ dependencies = [
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.34 (registry+https://github.com/rust-lang/crates.io-index)",
  "url 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "log 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex 0.1.41 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
