@@ -1,4 +1,4 @@
-
+use db_core::data_interface::ToBytes;
 
 pub struct Person<'a> {
     names: Names,
@@ -7,6 +7,12 @@ pub struct Person<'a> {
 
 impl<'a> Person<'a> {
 
+}
+
+impl<'a> ToBytes for Person<'a> {
+    fn to_data<'b>(&'b self) -> Vec<u8> {
+        vec![]
+    }
 }
 
 pub struct Name {

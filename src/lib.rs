@@ -1,26 +1,18 @@
+#[macro_use] extern crate log;
+extern crate env_logger;
 extern crate lmdb_rs as lmdb;
+extern crate iron;
+extern crate router;
+extern crate rustc_serialize;
+
 
 mod db;
-mod state;
-mod people;
-mod data_interface;
+mod db_core;
+pub mod server;
 
-use state::State;
-use db::DB;
+//use db::state::State;
+use db_core::db::DB;
 
-fn try_me() {
-    println!("Starting ComposeDB");
-
-    // let settings = state::Settings::new();
-    // let s = State::new(&settings);
-    // let db_obj = DB::new(s.db_path);
-    // db_obj.set(&"key1", &"val1");
-    //
-    // let val = db_obj.get(&"key1");
-    // println!("key1 => {}", val);
-
-    println!("Exiting ComposeDB");
-}
 
 #[test]
 fn it_works() {
