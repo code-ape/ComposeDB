@@ -1,12 +1,12 @@
 
 use std::sync::{Arc};
-use std::sync::mpsc::{channel, sync_channel, SyncSender, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
 use std::thread;
 use std::time::Duration;
 
-struct WorkerPool {
+pub struct WorkerPool {
     workers: Vec<Worker>,
     recv_queue: Receiver<Job>,
     running: Arc<AtomicBool>
@@ -29,7 +29,7 @@ impl WorkerPool {
     }
 
     fn is_running(&self) -> bool {
-        self.running.load(Ordering::AcqRel)
+        self.running.load(Ordering::Acquire)
     }
 
     fn worker_has_opening(&self) -> bool {
@@ -51,7 +51,7 @@ impl WorkerPool {
     }
 
     pub fn run(&mut self) -> Result<(), &'static str> {
-        println!("Attempting to start workers.");
+        debug!("Attempting to start workers.");
 
         if self.is_running() {
             return Err("Worker pool already runnng.");
@@ -61,10 +61,9 @@ impl WorkerPool {
             worker.start().unwrap();
         }
 
-        println!("Workers started.");
+        debug!("Workers started.");
 
-        println!("Starting pool head");
-
+        debug!("Starting pool head");
 
         loop {
             let mut worker_slots: Vec<(usize, usize)> = Vec::new(); // TODO: allow this to be reordered
@@ -77,10 +76,15 @@ impl WorkerPool {
                 counter += 1;
             }
 
-            println!("Pool head receiving job.");
             let j : Job = match self.recv_queue.recv() {
-                Ok(x) => x,
-                RecvErr => break
+                Ok(x) => {
+                    debug!("Pool head: job received");
+                    x
+                },
+                _ => {
+                    error!("Pool head: job failed to be received");
+                    break;
+                }
             };
 
             match total_slots {
@@ -100,7 +104,10 @@ impl WorkerPool {
 
                     }
                     let ref worker = self.workers[worker_num];
-                    worker.give_job(j).unwrap();
+                    match worker.give_job(j) {
+                        Err(_) => panic!("Failed to give worker job"),
+                        Ok(_) => {}
+                    };
                 },
                 1 => {
                     let (worker_num, _) = worker_slots[0];
@@ -108,19 +115,36 @@ impl WorkerPool {
                     worker.give_job(j);
                 },
                 x => {
+                    debug!("More than 1 worker slot available.");
                     let mut jobs : Vec<Job> = Vec::new();
                     jobs.push(j);
-                    for i in 0..(total_slots-1) {
+
+                    for _ in 0..(x-1) {
                         match self.recv_queue.try_recv() {
                             Ok(x) => jobs.push(x),
                             Err(_) => break
                         }
                     }
 
+                    debug!("{} jobs obtained.", jobs.len());
+                    let mut jobs_left = true;
+
                     for (worker_num, num_available) in worker_slots {
                         let ref worker = self.workers[worker_num];
                         for _ in 0..num_available {
-                            worker.give_job(jobs.pop().unwrap());
+                            match jobs.pop() {
+                                Some(x) => {
+                                    debug!("Giving worker {} job.", worker_num);
+                                    worker.give_job(x).unwrap();
+                                },
+                                None => {
+                                    jobs_left = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if !jobs_left {
+                            break;
                         }
                     }
 
@@ -131,7 +155,7 @@ impl WorkerPool {
 
 
         }
-        println!("Pool head ended");
+        debug!("Pool head ended");
 
         Ok(())
 
@@ -139,6 +163,7 @@ impl WorkerPool {
 
 }
 
+// TODO: allow different job types how? Enum inside job? Or make Job a enum?
 pub struct Job {
     pub number: u32,
     pub chan: Sender<u32>
@@ -183,29 +208,40 @@ impl Worker {
         let alive = self.alive.clone();
         let queue_available = self.queue_available.clone();
 
-        thread::spawn(move || {
+        thread::Builder::new().name(format!("Worker {}", id)).spawn(move || {
+            debug!("Worker {}: starting", id);
             loop {
-                println!("Worker {} receiving job.", id);
                 let j : Job = match out_ch.recv() {
-                    Ok(x) => x,
-                    RecvErr => break
+                    Ok(x) => {
+                        debug!("Worker {}: job received", id);
+                        x
+                    },
+                    _ => {
+                        error!("Worker {}: job failed to be received", id);
+                        break;
+                    }
                 };
+
                 queue_available.fetch_add(1, Ordering::SeqCst);
 
-                j.chan.send(j.number*j.number);
+                // TODO: so this needs to actually access the database now
+                let resp = j.chan.send(j.number*j.number);
+                if resp.is_err() {
+                    error!("Worker {}: couldn't reply to job", id);
+                }
             }
 
             running.store(false, Ordering::SeqCst);
             alive.store(false, Ordering::SeqCst);
 
-            println!("Worker {} exiting.", id);
+            debug!("Worker {} exiting.", id);
         });
 
         Ok(())
     }
 
     fn is_running(&self) -> bool {
-        self.running.load(Ordering::AcqRel)
+        self.running.load(Ordering::Acquire)
     }
 
     fn get_queue_availability(&self) -> usize {
@@ -220,7 +256,7 @@ impl Worker {
     }
 
     fn give_job(&self, j: Job) -> Result<(), &'static str> {
-        if self.get_queue_availability() > 0 {
+        if self.get_queue_availability() == 0 {
             return Err("Queue full for worker");
         }
         let q = self.get_queue_in();
