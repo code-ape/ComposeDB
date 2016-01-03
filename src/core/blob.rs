@@ -1,4 +1,4 @@
-use db_core::data_interface::ToBytes;
+use core::data_interface::ToBytes;
 
 pub struct DataBlob {
     int_type: u32,

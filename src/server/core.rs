@@ -2,27 +2,44 @@
 use std::sync::Mutex;
 use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
+use std::path::Path;
 
 use env_logger;
 use iron::prelude::*;
 use router::Router;
 
+use lmdb::EnvBuilder;
 use server::routes::{get_value,set_value,ping};
-use db::worker::{WorkerPool, Job};
+use db::worker::WorkerPool;
+use core::query::{Query, GetQuery, SetQuery, QueryType};
 
+fn receive_query(q: Box<Query>) -> Result<(),()> {
+    match q.get_type() {
+        QueryType::Get => {
+            println!("A wild GET query appears!");
+            Ok(())
+        },
+        QueryType::Set => {
+            println!("A wild SET query appears!");
+            Ok(())
+        }
+    }
+}
 
 pub fn run() {
     env_logger::init().unwrap();
 
-    // let queue : Arc<Mutex<VecDeque<Job>>> = Arc::new(Mutex::new(VecDeque::new()));
-    // let signal : Arc<Condvar> = Arc::new(Condvar::new());
-    let (in_ch, out_ch) : (SyncSender<Job>, Receiver<Job>) = sync_channel(20);
+    let (in_ch, out_ch) : (SyncSender<Box<Query>>, Receiver<Box<Query>>) = sync_channel(20);
 
+
+    let path = Path::new("composedb_data");
+    let db_env = EnvBuilder::new().open(&path, 0o777).unwrap();
 
     let num_workers = 3;
     let worker_queue_size = 2;
 
-    let mut pool = WorkerPool::new(num_workers, worker_queue_size, out_ch);
+    let mut pool =
+            WorkerPool::new(num_workers, worker_queue_size, out_ch, db_env, receive_query);
 
     thread::Builder::new().name("Pool thread".to_string()).spawn(move || {
         pool.run();
@@ -30,8 +47,6 @@ pub fn run() {
 
     let mut router = Router::new();
 
-    // let signal_2 = signal.clone();
-    // let signal_3 = signal.clone();
     let in_ch_2 = Mutex::new(in_ch.clone());
     let in_ch_3 = Mutex::new(in_ch.clone());
 
@@ -41,33 +56,5 @@ pub fn run() {
 
     info!("Starting ComposeDB.");
     Iron::new(router).http("localhost:3000").unwrap();
-
-    // for i in 0..num_workers {
-    //     let queue_clone = queue.clone();
-    //     let signal_clone = signal.clone();
-    //
-    //     thread::spawn(move || {
-    //         debug!("Starting worker {}", i);
-    //         let mut counter = 0;
-    //         let mut j: Job;
-    //         loop {
-    //             loop {
-    //                 let mut q = queue_clone.lock().unwrap();
-    //                 q = signal_clone.wait(q).unwrap();
-    //                 j = match q.pop_front() {
-    //                     Some(x) => x,
-    //                     None => continue
-    //                 };
-    //                 break;
-    //             }
-    //             debug!("Worker {}: received job {}", i, counter);
-    //             let new_value = j.number + 100;
-    //             thread::sleep_ms(10000);
-    //             j.chan.send(new_value).unwrap();
-    //             counter += 1;
-    //         }
-    //         //println!("Ending worker {}", i);
-    //     });
-    // }
 
 }

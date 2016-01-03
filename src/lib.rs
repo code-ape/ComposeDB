@@ -7,11 +7,11 @@ extern crate rustc_serialize;
 
 
 mod db;
-mod db_core;
+mod core;
 pub mod server;
 
 //use db::state::State;
-use db_core::db::DB;
+use core::db::DB;
 
 
 #[test]

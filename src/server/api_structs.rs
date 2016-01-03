@@ -8,16 +8,16 @@ pub struct GetRequest {
 
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct GetResponse {
-    pub value: u32
+    pub value: String
 }
 
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct SetRequest {
     pub key: String,
-    pub value: u32
+    pub value: String
 }
 
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct SetResponse {
-    pub status: u32
+    pub status: String
 }

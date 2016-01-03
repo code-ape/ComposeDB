@@ -1,4 +1,4 @@
-
+use std::any::Any;
 use std::sync::{Arc};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
@@ -6,23 +6,39 @@ use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-pub struct WorkerPool {
-    workers: Vec<Worker>,
-    recv_queue: Receiver<Job>,
+use lmdb::core as lmdb_core;
+use core::query::Query;
+
+
+pub type Handler<T> = Fn(T) -> Result<(),()>;
+
+
+pub struct WorkerPool<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Copy + Fn(Box<T>) -> Result<(),()>> {
+    workers: Vec<Worker<T,H>>,
+    action: H,
+    recv_queue: Receiver<Box<T>>,
     running: Arc<AtomicBool>
 }
 
-impl WorkerPool {
-    pub fn new(num_workers: usize, worker_queue_size: usize, recv_queue: Receiver<Job>) -> WorkerPool {
-        let mut workers_vec : Vec<Worker> = Vec::with_capacity(num_workers);
+impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Copy + Fn(Box<T>) -> Result<(),()>> WorkerPool<T, H> {
+    pub fn new(
+                num_workers: usize,
+                worker_queue_size: usize,
+                recv_queue: Receiver<Box<T>>,
+                db_env: lmdb_core::Environment,
+                action: H
+            ) -> WorkerPool<T,H> {
+
+        let mut workers_vec : Vec<Worker<T,H>> = Vec::with_capacity(num_workers);
 
         for i in 0..num_workers {
-            let w = Worker::new(i, worker_queue_size);
+            let w = Worker::new(i, worker_queue_size, db_env.clone(), action);
             workers_vec.push(w);
         }
 
         return WorkerPool {
             workers: workers_vec,
+            action: action,
             recv_queue: recv_queue,
             running: Arc::new(AtomicBool::new(false))
         };
@@ -76,7 +92,7 @@ impl WorkerPool {
                 counter += 1;
             }
 
-            let j : Job = match self.recv_queue.recv() {
+            let job = match self.recv_queue.recv() {
                 Ok(x) => {
                     debug!("Pool head: job received");
                     x
@@ -104,7 +120,7 @@ impl WorkerPool {
 
                     }
                     let ref worker = self.workers[worker_num];
-                    match worker.give_job(j) {
+                    match worker.give_job(job) {
                         Err(_) => panic!("Failed to give worker job"),
                         Ok(_) => {}
                     };
@@ -112,12 +128,12 @@ impl WorkerPool {
                 1 => {
                     let (worker_num, _) = worker_slots[0];
                     let ref worker = self.workers[worker_num];
-                    worker.give_job(j);
+                    worker.give_job(job);
                 },
                 x => {
                     debug!("More than 1 worker slot available.");
-                    let mut jobs : Vec<Job> = Vec::new();
-                    jobs.push(j);
+                    let mut jobs : Vec<Box<T>> = Vec::new();
+                    jobs.push(job);
 
                     for _ in 0..(x-1) {
                         match self.recv_queue.try_recv() {
@@ -147,8 +163,6 @@ impl WorkerPool {
                             break;
                         }
                     }
-
-
                 }
             }
 
@@ -163,33 +177,36 @@ impl WorkerPool {
 
 }
 
-// TODO: allow different job types how? Enum inside job? Or make Job a enum?
-pub struct Job {
-    pub number: u32,
-    pub chan: Sender<u32>
-}
-
-struct Worker {
+struct Worker<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result<(),()>> {
     id: usize,
     name: String,
+    db_env: lmdb_core::Environment,
+    db_handle: lmdb_core::DbHandle,
     running: Arc<AtomicBool>,
     alive: Arc<AtomicBool>,
-    queue_in: Option<Sender<Job>>,
+    queue_in: Option<Sender<Box<T>>>,
     queue_size: usize,
-    queue_available: Arc<AtomicUsize>
+    queue_available: Arc<AtomicUsize>,
+    action: Arc<H>
 }
 
-impl Worker {
-    fn new(id: usize, queue_size: usize) -> Worker {
+impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result<(),()>> Worker<T,H> {
+    fn new(id: usize, queue_size: usize, db_env: lmdb_core::Environment,
+            action: H) -> Worker<T,H> {
+
+        let handle = db_env.get_default_db(lmdb_core::DbFlags::empty()).unwrap();
 
         Worker {
             id: id,
             name: format!("Worker number {}", id),
+            db_env: db_env,
+            db_handle: handle,
             running: Arc::new(AtomicBool::new(false)),
             alive: Arc::new(AtomicBool::new(true)),
             queue_in: None,
             queue_size: queue_size,
-            queue_available: Arc::new(AtomicUsize::new(queue_size))
+            queue_available: Arc::new(AtomicUsize::new(queue_size)),
+            action: Arc::new(action)
         }
     }
 
@@ -199,7 +216,7 @@ impl Worker {
             return Err("Worker already running");
         }
 
-        let (in_ch, out_ch) : (Sender<Job>, Receiver<Job>) = channel();
+        let (in_ch, out_ch) : (Sender<Box<T>>, Receiver<Box<T>>) = channel();
 
         self.queue_in = Some(in_ch);
 
@@ -207,11 +224,12 @@ impl Worker {
         let running = self.running.clone();
         let alive = self.alive.clone();
         let queue_available = self.queue_available.clone();
+        let action = self.action.clone();
 
         thread::Builder::new().name(format!("Worker {}", id)).spawn(move || {
             debug!("Worker {}: starting", id);
             loop {
-                let j : Job = match out_ch.recv() {
+                let j : Box<T> = match out_ch.recv() {
                     Ok(x) => {
                         debug!("Worker {}: job received", id);
                         x
@@ -224,8 +242,9 @@ impl Worker {
 
                 queue_available.fetch_add(1, Ordering::SeqCst);
 
-                // TODO: so this needs to actually access the database now
-                let resp = j.chan.send(j.number*j.number);
+                //let action = self.action;
+                let resp = action(j);
+
                 if resp.is_err() {
                     error!("Worker {}: couldn't reply to job", id);
                 }
@@ -248,14 +267,14 @@ impl Worker {
         self.queue_available.load(Ordering::Acquire)
     }
 
-    fn get_queue_in(&self) -> &Sender<Job> {
+    fn get_queue_in(&self) -> &Sender<Box<T>> {
         match self.queue_in.as_ref() {
             Some(x) => x,
             None => panic!("Tried to get queue from worker before it started!")
         }
     }
 
-    fn give_job(&self, j: Job) -> Result<(), &'static str> {
+    fn give_job(&self, j: Box<T>) -> Result<(), &'static str> {
         if self.get_queue_availability() == 0 {
             return Err("Queue full for worker");
         }
