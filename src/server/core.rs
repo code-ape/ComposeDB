@@ -1,5 +1,5 @@
 
-use std::sync::Mutex;
+use std::sync::{Arc,Mutex};
 use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::path::Path;
@@ -11,20 +11,8 @@ use router::Router;
 use lmdb::EnvBuilder;
 use server::routes::{get_value,set_value,ping};
 use db::worker::WorkerPool;
-use core::query::{Query, GetQuery, SetQuery, QueryType};
+use core::query::{Query, run_query, gen_run_query};
 
-fn receive_query(q: Box<Query>) -> Result<(),()> {
-    match q.get_type() {
-        QueryType::Get => {
-            println!("A wild GET query appears!");
-            Ok(())
-        },
-        QueryType::Set => {
-            println!("A wild SET query appears!");
-            Ok(())
-        }
-    }
-}
 
 pub fn run() {
     env_logger::init().unwrap();
@@ -38,8 +26,12 @@ pub fn run() {
     let num_workers = 3;
     let worker_queue_size = 2;
 
-    let mut pool =
-            WorkerPool::new(num_workers, worker_queue_size, out_ch, db_env, receive_query);
+    //let run_query = Arc::new(gen_run_query(db_env));
+    let run_query = Arc::new(move |q: Box<Query>| run_query(q, db_env));
+
+    let mut pool = WorkerPool::new(num_workers, worker_queue_size,
+        out_ch, run_query);
+        //out_ch, move |q: Box<Query>| run_query(q, db_env));
 
     thread::Builder::new().name("Pool thread".to_string()).spawn(move || {
         pool.run();

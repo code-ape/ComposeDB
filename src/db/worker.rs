@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::sync::{Arc};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
@@ -7,7 +6,6 @@ use std::thread;
 use std::time::Duration;
 
 use lmdb::core as lmdb_core;
-use core::query::Query;
 
 
 pub type Handler<T> = Fn(T) -> Result<(),()>;
@@ -25,14 +23,13 @@ impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Copy + Fn(Box<T>) ->
                 num_workers: usize,
                 worker_queue_size: usize,
                 recv_queue: Receiver<Box<T>>,
-                db_env: lmdb_core::Environment,
                 action: H
             ) -> WorkerPool<T,H> {
 
         let mut workers_vec : Vec<Worker<T,H>> = Vec::with_capacity(num_workers);
 
         for i in 0..num_workers {
-            let w = Worker::new(i, worker_queue_size, db_env.clone(), action);
+            let w = Worker::new(i, worker_queue_size, action);
             workers_vec.push(w);
         }
 
@@ -180,8 +177,6 @@ impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Copy + Fn(Box<T>) ->
 struct Worker<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result<(),()>> {
     id: usize,
     name: String,
-    db_env: lmdb_core::Environment,
-    db_handle: lmdb_core::DbHandle,
     running: Arc<AtomicBool>,
     alive: Arc<AtomicBool>,
     queue_in: Option<Sender<Box<T>>>,
@@ -191,16 +186,11 @@ struct Worker<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) 
 }
 
 impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result<(),()>> Worker<T,H> {
-    fn new(id: usize, queue_size: usize, db_env: lmdb_core::Environment,
-            action: H) -> Worker<T,H> {
-
-        let handle = db_env.get_default_db(lmdb_core::DbFlags::empty()).unwrap();
+    fn new(id: usize, queue_size: usize, action: H) -> Worker<T,H> {
 
         Worker {
             id: id,
             name: format!("Worker number {}", id),
-            db_env: db_env,
-            db_handle: handle,
             running: Arc::new(AtomicBool::new(false)),
             alive: Arc::new(AtomicBool::new(true)),
             queue_in: None,

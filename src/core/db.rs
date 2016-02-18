@@ -5,16 +5,18 @@ use lmdb::{EnvBuilder, DbFlags};
 use lmdb::core::{Environment, MdbResult};
 use lmdb::traits::FromMdbValue;
 
-pub type DbState = Option<DB>;
+pub type DbState<'a> = Option<DB<'a>>;
 
-pub struct DB {
-    env: Environment
+pub struct DB<'a> {
+    path: &'a Path,
+    env:  Environment
 }
 
 
-impl DB {
+impl<'a> DB<'a> {
     pub fn new(p: &Path) -> DB {
         DB {
+            path: p,
             env: EnvBuilder::new().open(p, 0o777).unwrap(),
         }
     }

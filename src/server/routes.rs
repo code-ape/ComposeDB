@@ -8,7 +8,7 @@ use iron::prelude::*;
 use iron::status;
 use rustc_serialize::json;
 
-use core::query::{Query, SetQuery, GetQuery};
+use core::query::{Query, new_set_query, new_get_query};
 use server::api_structs;
 
 pub fn ping(_: &mut Request) -> IronResult<Response> {
@@ -20,7 +20,7 @@ pub fn get_value(req: &mut Request, in_ch_mut: &Mutex<SyncSender<Box<Query>>>)
     debug!("Request for route '/json'");
     let mut payload = String::new();
     req.body.read_to_string(&mut payload).unwrap();
-    let (q,rx) = GetQuery::new(payload); //as (T, Receiver<String>;
+    let (q,rx) = new_get_query(payload); //as (T, Receiver<String>;
 
     {
         let in_ch = in_ch_mut.lock().unwrap();
@@ -44,9 +44,8 @@ pub fn set_value(req: &mut Request, in_ch_mut: &Mutex<SyncSender<Box<Query>>>) -
     req.body.read_to_string(&mut payload).unwrap();
     let set_req : api_structs::SetRequest = json::decode(&payload).unwrap();
 
-    let (tx, rx) : (Sender<String>, Receiver<String>)= channel();
+    let (q,rx) = new_set_query(set_req.key, payload); //as (T, Receiver<String>;
 
-    let q = SetQuery { key: set_req.key, value: "A VALUE".to_string(), chan: tx};//, chan: tx};
     {
         let in_ch = in_ch_mut.lock().unwrap();
         in_ch.send(Box::new(q));
