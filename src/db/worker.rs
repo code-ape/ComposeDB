@@ -11,14 +11,14 @@ use lmdb::core as lmdb_core;
 pub type Handler<T> = Fn(T) -> Result<(),()>;
 
 
-pub struct WorkerPool<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Copy + Fn(Box<T>) -> Result<(),()>> {
+pub struct WorkerPool<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result<(),()>> {
     workers: Vec<Worker<T,H>>,
-    action: H,
+    action: Arc<H>,
     recv_queue: Receiver<Box<T>>,
     running: Arc<AtomicBool>
 }
 
-impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Copy + Fn(Box<T>) -> Result<(),()>> WorkerPool<T, H> {
+impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result<(),()>> WorkerPool<T, H> {
     pub fn new(
                 num_workers: usize,
                 worker_queue_size: usize,
@@ -27,15 +27,16 @@ impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Copy + Fn(Box<T>) ->
             ) -> WorkerPool<T,H> {
 
         let mut workers_vec : Vec<Worker<T,H>> = Vec::with_capacity(num_workers);
+        let arc_action = Arc::new(action);
 
         for i in 0..num_workers {
-            let w = Worker::new(i, worker_queue_size, action);
+            let w = Worker::new(i, worker_queue_size, arc_action.clone());
             workers_vec.push(w);
         }
 
         return WorkerPool {
             workers: workers_vec,
-            action: action,
+            action: arc_action,
             recv_queue: recv_queue,
             running: Arc::new(AtomicBool::new(false))
         };
@@ -186,7 +187,7 @@ struct Worker<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) 
 }
 
 impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result<(),()>> Worker<T,H> {
-    fn new(id: usize, queue_size: usize, action: H) -> Worker<T,H> {
+    fn new(id: usize, queue_size: usize, action: Arc<H>) -> Worker<T,H> {
 
         Worker {
             id: id,
@@ -196,7 +197,7 @@ impl<T: 'static + Send + ?Sized, H: 'static + Send + Sync + Fn(Box<T>) -> Result
             queue_in: None,
             queue_size: queue_size,
             queue_available: Arc::new(AtomicUsize::new(queue_size)),
-            action: Arc::new(action)
+            action: action
         }
     }
 

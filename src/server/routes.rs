@@ -20,7 +20,8 @@ pub fn get_value(req: &mut Request, in_ch_mut: &Mutex<SyncSender<Box<Query>>>)
     debug!("Request for route '/json'");
     let mut payload = String::new();
     req.body.read_to_string(&mut payload).unwrap();
-    let (q,rx) = new_get_query(payload); //as (T, Receiver<String>;
+    let get_req : api_structs::GetRequest = json::decode(&payload).unwrap();
+    let (q,rx) = new_get_query(get_req.key); //as (T, Receiver<String>;
 
     {
         let in_ch = in_ch_mut.lock().unwrap();
@@ -44,7 +45,7 @@ pub fn set_value(req: &mut Request, in_ch_mut: &Mutex<SyncSender<Box<Query>>>) -
     req.body.read_to_string(&mut payload).unwrap();
     let set_req : api_structs::SetRequest = json::decode(&payload).unwrap();
 
-    let (q,rx) = new_set_query(set_req.key, payload); //as (T, Receiver<String>;
+    let (q,rx) = new_set_query(set_req.key, set_req.value); //as (T, Receiver<String>;
 
     {
         let in_ch = in_ch_mut.lock().unwrap();
@@ -56,6 +57,6 @@ pub fn set_value(req: &mut Request, in_ch_mut: &Mutex<SyncSender<Box<Query>>>) -
     let response = api_structs::SetResponse{ status: result };
     let response_string = json::encode(&response).unwrap();
 
-    debug!("Resut for /set/json: {}", response_string);
+    debug!("Result for /set/json: {}", response_string);
     Ok(Response::with(status::Ok))
 }

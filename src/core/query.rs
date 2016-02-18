@@ -1,30 +1,60 @@
+use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender, Receiver, SendError};
 use lmdb::core::{Environment, MdbResult};
-use lmdb::{EnvBuilder, DbFlags};
+use lmdb::DbFlags;
 
-pub fn gen_run_query(env: Environment) -> Box<Fn(Box<Query>) -> Result<(),()>> {
-    Box::new(move |q: Box<Query>| {
-        run_query(q, env)
-    })
-}
+// pub fn gen_run_query(env: Arc<Environment>) -> Box<Fn(Box<Query>) -> Result<(),()>> {
+//     Box::new(move |q: Box<Query>| {
+//         run_query(q, env)
+//     })
+// }
 
-pub fn run_query(q: Box<Query>, env: Environment) -> Result<(),()> {
+pub fn run_query(q: Box<Query>, env: Arc<Environment>) -> Result<(),()> {
     match *q {
         Query::Get{key: ref key, chan: ref chan} => {
-            println!("A wild GET query appears!");
-            let txn = env.new_transaction().unwrap();
+            debug!("Received GetQuery");
             let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
-
+            debug!("A");
             let reader = env.get_reader().unwrap();
+            debug!("B");
             let db = reader.bind(&db_handle);
-            let val = db.get::<&str>(&*key).unwrap();
-            chan.send(val.to_string()).unwrap();
-            Ok(())
+            debug!("C");
+            match db.get::<&str>(&*key) {
+                Ok(val) => {
+                    debug!("D");
+                    chan.send(val.to_string()).unwrap();
+                    debug!("Finished processing GetQuery");
+                    Ok(())
+                },
+                Err(e) => {
+                    error!("Error retrieving key '{}': {}", key, e);
+                    chan.send("ERROR".to_string()).unwrap();
+                    Err(())
+                }
+            }
 
         },
         Query::Set{key: ref key, value: ref value, chan: ref chan} => {
-            println!("A wild SET query appears!");
-            Ok(())
+            debug!("Received SetQuery");
+            let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
+            debug!("A");
+            let txn = env.new_transaction().unwrap();
+            debug!("B");
+            {
+                let db = txn.bind(&db_handle);
+                debug!("C");
+                db.set(&*key, &*value).unwrap();
+            }
+
+            debug!("D");
+            match txn.commit() {
+                Ok(_) => {
+                    chan.send("OK".to_string()).unwrap();
+                    debug!("Finished processing SetQuery");
+                    Ok(())
+                }
+                Err(_) => Err(())
+            }
         }
     }
 }

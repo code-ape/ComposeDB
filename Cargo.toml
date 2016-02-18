@@ -23,3 +23,8 @@ path = "example/bare_build.rs"
 [[bin]]
 name = "composedb_simple"
 path = "example/simple_build.rs"
+
+
+[[bin]]
+name = "test_lmdbrs"
+path = "example/test.rs"
