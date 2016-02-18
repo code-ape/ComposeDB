@@ -14,14 +14,10 @@ pub fn run_query(q: Box<Query>, env: Arc<Environment>) -> Result<(),()> {
         Query::Get{key: ref key, chan: ref chan} => {
             debug!("Received GetQuery");
             let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
-            debug!("A");
             let reader = env.get_reader().unwrap();
-            debug!("B");
             let db = reader.bind(&db_handle);
-            debug!("C");
             match db.get::<&str>(&*key) {
                 Ok(val) => {
-                    debug!("D");
                     chan.send(val.to_string()).unwrap();
                     debug!("Finished processing GetQuery");
                     Ok(())
@@ -37,16 +33,12 @@ pub fn run_query(q: Box<Query>, env: Arc<Environment>) -> Result<(),()> {
         Query::Set{key: ref key, value: ref value, chan: ref chan} => {
             debug!("Received SetQuery");
             let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
-            debug!("A");
             let txn = env.new_transaction().unwrap();
-            debug!("B");
             {
                 let db = txn.bind(&db_handle);
-                debug!("C");
                 db.set(&*key, &*value).unwrap();
             }
 
-            debug!("D");
             match txn.commit() {
                 Ok(_) => {
                     chan.send("OK".to_string()).unwrap();
