@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["ferris"]
 
 [dependencies]
-lmdb-rs = "0.5.0"
+lmdb-rs = "0.6.0"
 iron = "*"
 router = "*"
 rustc-serialize = "*"

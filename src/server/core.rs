@@ -1,5 +1,5 @@
 
-use std::sync::{Arc,Mutex};
+use std::sync::Mutex;
 use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::path::Path;
@@ -8,11 +8,10 @@ use env_logger;
 use iron::prelude::*;
 use router::Router;
 
-use lmdb::EnvBuilder;
 use server::routes::{get_value,set_value,ping};
 use db::worker::WorkerPool;
 use core::db::DB;
-use core::query::{Query, run_query};//, gen_run_query};
+use core::query::{Query, run_query};
 
 
 pub fn run() {
@@ -20,21 +19,16 @@ pub fn run() {
 
     let (in_ch, out_ch) : (SyncSender<Box<Query>>, Receiver<Box<Query>>) = sync_channel(20);
 
-
     let path = Path::new("composedb_data");
-    //let db = Arc::new(DB::new(path));
     let db = DB::new(path);
-
 
     let num_workers = 3;
     let worker_queue_size = 2;
 
-    //let run_query = Arc::new(gen_run_query(db_env));
     let run_query = move |q: Box<Query>| run_query(q, db.clone());
 
     let mut pool = WorkerPool::new(num_workers, worker_queue_size,
         out_ch, run_query);
-        //out_ch, move |q: Box<Query>| run_query(q, db_env));
 
     thread::Builder::new().name("Pool thread".to_string()).spawn(move || {
         pool.run();

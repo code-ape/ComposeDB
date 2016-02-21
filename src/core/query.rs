@@ -1,27 +1,19 @@
 use std::str;
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender, Receiver, SendError};
-use lmdb::core::{Environment, MdbResult};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use lmdb::DbFlags;
 use rustc_serialize::json;
 
 use core::db::DB;
 use core::blob::DataBlob;
 
-// pub fn gen_run_query(env: Arc<Environment>) -> Box<Fn(Box<Query>) -> Result<(),()>> {
-//     Box::new(move |q: Box<Query>| {
-//         run_query(q, env)
-//     })
-// }
-
 pub fn run_query(q: Box<Query>, db: Arc<DB>) -> Result<(),()> {
     match *q {
         //TODO: make this use blobs
         Query::Get{ref key, ref chan} => {
             debug!("Received GetQuery");
-            let db_handle = db.env.get_default_db(DbFlags::empty()).unwrap();
             let reader = db.env.get_reader().unwrap();
-            let db_ref = reader.bind(&db_handle);
+            let db_ref = reader.bind(&(db.handle));
             match db_ref.get::<&[u8]>(&*key) {
                 Ok(val) => {
                     let b : DataBlob = json::decode(str::from_utf8(val).unwrap()).unwrap();
@@ -37,15 +29,13 @@ pub fn run_query(q: Box<Query>, db: Arc<DB>) -> Result<(),()> {
             }
 
         },
-        //TODO: make this use blobs
         Query::Set{ref key, ref value, ref chan} => {
             debug!("Received SetQuery");
-            let db_handle = db.env.get_default_db(DbFlags::empty()).unwrap();
             let txn = db.env.new_transaction().unwrap();
             let action_log = db.action_log_factory.new_entry(key.clone(), 0);
             let b : DataBlob = DataBlob::new_from_vec(0,0,value.clone().into_bytes());
             {
-                let db_ref = txn.bind(&db_handle);
+                let db_ref = txn.bind(&(db.handle));
                 db_ref.set(&*key, &json::encode(&b).unwrap()).unwrap();
                 db_ref.set(&action_log.gen_key(), &action_log.to_json()).unwrap();
             }
@@ -61,16 +51,15 @@ pub fn run_query(q: Box<Query>, db: Arc<DB>) -> Result<(),()> {
         },
         Query::GetLast{ref key, ref chan} => {
             debug!("Received GetLastQuery");
-            let db_handle = db.env.get_default_db(DbFlags::empty()).unwrap();
             let reader = db.env.get_reader().unwrap();
-            let db_ref = reader.bind(&db_handle);
+            let db_ref = reader.bind(&(db.handle));
             let (range_begin, range_end) = (format!("{}/", key), format!("{}0", key));
             let cursor = db_ref.keyrange_from_to(&range_begin, &range_end).unwrap();
             match cursor.last() {
                 Some(cursor_val) => {
                     let val = cursor_val.get_value::<&[u8]>();
                     let b : DataBlob = json::decode(str::from_utf8(val).unwrap()).unwrap();
-                    chan.send(b.data).unwrap();
+                    chan.send(b.data.clone()).unwrap();
                     debug!("Finished processing GetLastQuery");
                     Ok(())
                 },
@@ -87,21 +76,17 @@ pub fn run_query(q: Box<Query>, db: Arc<DB>) -> Result<(),()> {
             let db_handle = db.env.get_default_db(DbFlags::empty()).unwrap();
             let reader = db.env.get_reader().unwrap();
             let db_ref = reader.bind(&db_handle);
-            // let (range_begin, range_end) = (format!("{}/", key), format!("{}0", key));
-            // let cursor = db_ref.keyrange_from_to(&range_begin, &range_end).unwrap();
-            // match cursor.last() {
-            match db_ref.get::<Vec<u8>>(&"log/0") {
-                //    Some(cursor_val) => {
-                Ok(val) => {
+            let (range_begin, range_end) = (format!("{}/", key), format!("{}0", key));
+            let cursor = db_ref.keyrange_from_to(&range_begin, &range_end).unwrap();
+            match cursor.last() {
+                Some(cursor_val) => {
                     //TODO: figure out why this is segfaulting
-                    //let val = cursor_val.get_value::<Vec<u8>>();
-                    println!("YAY");
-                    chan.send(val).unwrap();
+                    let val = cursor_val.get_value::<&[u8]>();
+                    chan.send(val.to_vec()).unwrap();
                     debug!("Finished processing GetLastLog Query");
                     Ok(())
                 },
-                // None  => {
-                Err(_)  => {
+                None  => {
                     error!("No values for key's under '{}'", key);
                     chan.send("ERROR".to_string().into_bytes()).unwrap();
                     Err(())
