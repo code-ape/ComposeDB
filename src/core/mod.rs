@@ -3,3 +3,4 @@ pub mod data_interface;
 pub mod db;
 pub mod type_registry;
 pub mod query;
+pub mod action_log;

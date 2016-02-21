@@ -28,11 +28,11 @@ pub fn get_value(req: &mut Request, in_ch_mut: &Mutex<SyncSender<Box<Query>>>)
         in_ch.send(Box::new(q));
     }
 
-    let result : String = match rx.recv() {
+    let result : Vec<u8> = match rx.recv() {
         Ok(x) => x,
         _ => panic!("WTF CHANNEL")
     };
-    let response = api_structs::GetResponse{ value: result };
+    let response = api_structs::GetResponse{ value: String::from_utf8(result).unwrap() };
     let response_string = json::encode(&response).unwrap();
 
     debug!("Responded with: {}", response_string);
@@ -52,9 +52,9 @@ pub fn set_value(req: &mut Request, in_ch_mut: &Mutex<SyncSender<Box<Query>>>) -
         in_ch.send(Box::new(q));
     }
 
-    let result : String = rx.recv().unwrap();
+    let result : Vec<u8> = rx.recv().unwrap();
 
-    let response = api_structs::SetResponse{ status: result };
+    let response = api_structs::SetResponse{ status: String::from_utf8(result).unwrap() };
     let response_string = json::encode(&response).unwrap();
 
     debug!("Result for /set/json: {}", response_string);

@@ -1,118 +1,127 @@
+use std::str;
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender, Receiver, SendError};
-use lmdb::core::{Environment, MdbResult};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use lmdb::DbFlags;
+use rustc_serialize::json;
 
-// pub fn gen_run_query(env: Arc<Environment>) -> Box<Fn(Box<Query>) -> Result<(),()>> {
-//     Box::new(move |q: Box<Query>| {
-//         run_query(q, env)
-//     })
-// }
+use core::db::DB;
+use core::blob::DataBlob;
 
-pub fn run_query(q: Box<Query>, env: Arc<Environment>) -> Result<(),()> {
+pub fn run_query(q: Box<Query>, db: Arc<DB>) -> Result<(),()> {
     match *q {
-        Query::Get{key: ref key, chan: ref chan} => {
+        //TODO: make this use blobs
+        Query::Get{ref key, ref chan} => {
             debug!("Received GetQuery");
-            let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
-            let reader = env.get_reader().unwrap();
-            let db = reader.bind(&db_handle);
-            match db.get::<&str>(&*key) {
+            let reader = db.env.get_reader().unwrap();
+            let db_ref = reader.bind(&(db.handle));
+            match db_ref.get::<&[u8]>(&*key) {
                 Ok(val) => {
-                    chan.send(val.to_string()).unwrap();
+                    let b : DataBlob = json::decode(str::from_utf8(val).unwrap()).unwrap();
+                    chan.send(b.data).unwrap();
                     debug!("Finished processing GetQuery");
                     Ok(())
                 },
                 Err(e) => {
                     error!("Error retrieving key '{}': {}", key, e);
-                    chan.send("ERROR".to_string()).unwrap();
+                    chan.send("ERROR".to_string().into_bytes()).unwrap();
                     Err(())
                 }
             }
 
         },
-        Query::Set{key: ref key, value: ref value, chan: ref chan} => {
+        Query::Set{ref key, ref value, ref chan} => {
             debug!("Received SetQuery");
-            let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
-            let txn = env.new_transaction().unwrap();
+            let txn = db.env.new_transaction().unwrap();
+            let action_log = db.action_log_factory.new_entry(key.clone(), 0);
+            let b : DataBlob = DataBlob::new_from_vec(0,0,value.clone().into_bytes());
             {
-                let db = txn.bind(&db_handle);
-                db.set(&*key, &*value).unwrap();
+                let db_ref = txn.bind(&(db.handle));
+                db_ref.set(&*key, &json::encode(&b).unwrap()).unwrap();
+                db_ref.set(&action_log.gen_key(), &action_log.to_json()).unwrap();
             }
 
             match txn.commit() {
                 Ok(_) => {
-                    chan.send("OK".to_string()).unwrap();
+                    chan.send("OK".to_string().into_bytes()).unwrap();
                     debug!("Finished processing SetQuery");
                     Ok(())
                 }
                 Err(_) => Err(())
             }
+        },
+        Query::GetLast{ref key, ref chan} => {
+            debug!("Received GetLastQuery");
+            let reader = db.env.get_reader().unwrap();
+            let db_ref = reader.bind(&(db.handle));
+            let (range_begin, range_end) = (format!("{}/", key), format!("{}0", key));
+            let cursor = db_ref.keyrange_from_to(&range_begin, &range_end).unwrap();
+            match cursor.last() {
+                Some(cursor_val) => {
+                    let val = cursor_val.get_value::<&[u8]>();
+                    let b : DataBlob = json::decode(str::from_utf8(val).unwrap()).unwrap();
+                    chan.send(b.data.clone()).unwrap();
+                    debug!("Finished processing GetLastQuery");
+                    Ok(())
+                },
+                None  => {
+                    error!("No values for key's under '{}'", key);
+                    chan.send("ERROR".to_string().into_bytes()).unwrap();
+                    Err(())
+                }
+            }
+        },
+        Query::GetLastLog{ref chan} => {
+            debug!("Received GetLastLog Query");
+            let key = "log";
+            let db_handle = db.env.get_default_db(DbFlags::empty()).unwrap();
+            let reader = db.env.get_reader().unwrap();
+            let db_ref = reader.bind(&db_handle);
+            let (range_begin, range_end) = (format!("{}/", key), format!("{}0", key));
+            let cursor = db_ref.keyrange_from_to(&range_begin, &range_end).unwrap();
+            match cursor.last() {
+                Some(cursor_val) => {
+                    //TODO: figure out why this is segfaulting
+                    let val = cursor_val.get_value::<&[u8]>();
+                    chan.send(val.to_vec()).unwrap();
+                    debug!("Finished processing GetLastLog Query");
+                    Ok(())
+                },
+                None  => {
+                    error!("No values for key's under '{}'", key);
+                    chan.send("ERROR".to_string().into_bytes()).unwrap();
+                    Err(())
+                }
+            }
         }
     }
 }
 
-// pub trait Query: Send {
-//     fn get_type(&self) -> QueryType;
-//     fn send_result(&self) -> Result<(), SendError<u32>>;
-// }
 
 
 pub enum Query {
-    Set{key: String, value: String, chan: Sender<String>},
-    Get{key: String, chan: Sender<String>}
+    Set{key: String, value: String, chan: Sender<Vec<u8>>},
+    //Update{key: String, value: String, chan: Sender<String>},
+    Get{key: String, chan: Sender<Vec<u8>>},
+    GetLast{key: String, chan: Sender<Vec<u8>>},
+    GetLastLog{chan: Sender<Vec<u8>>}
 }
 
-pub fn new_set_query(key: String, val: String) -> (Query, Receiver<String>) {
-    let (tx, rx) : (Sender<String>, Receiver<String>) = channel();
+pub fn new_set_query(key: String, val: String) -> (Query, Receiver<Vec<u8>>) {
+    let (tx, rx) : (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
     (Query::Set{ key: key, value: val, chan: tx }, rx)
 }
 
-pub fn new_get_query(key: String) -> (Query, Receiver<String>) {
-    let (tx, rx) : (Sender<String>, Receiver<String>) = channel();
+pub fn new_get_query(key: String) -> (Query, Receiver<Vec<u8>>) {
+    let (tx, rx) : (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
     (Query::Get{ key: key, chan: tx }, rx)
 }
 
-// pub struct GetQuery {
-//     pub key: String,
-//     pub chan: Sender<String>
-// }
-//
-// pub struct SetQuery {
-//     pub key: String,
-//     pub value: String,
-//     pub chan: Sender<String>
-// }
+pub fn new_getlast_query(key: String) -> (Query, Receiver<Vec<u8>>) {
+    let (tx, rx) : (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    (Query::GetLast{ key: key, chan: tx }, rx)
+}
 
-
-// impl GetQuery {
-//     pub fn new(key: String) -> (GetQuery, Receiver<String>) {
-//         let (tx, rx) : (Sender<String>, Receiver<String>) = channel();
-//         (GetQuery{ key: key, chan: tx }, rx)
-//     }
-// }
-//
-// impl SetQuery {
-//     pub fn new(key: String, val: String) -> (SetQuery, Receiver<String>) {
-//         let (tx, rx) : (Sender<String>, Receiver<String>) = channel();
-//         (SetQuery{ key: key, value: val, chan: tx }, rx)
-//     }
-// }
-//
-//
-// impl Query for GetQuery {
-//
-//     fn get_type(&self) -> QueryType { QueryType::Get }
-//
-//     fn send_result(&self) -> Result<(), SendError<u32>> {
-//         Ok(())
-//     }
-// }
-//
-// impl Query for SetQuery {
-//
-//     fn get_type(&self) -> QueryType { QueryType::Set }
-//
-//     fn send_result(&self) -> Result<(), SendError<u32>> {
-//         Ok(())
-//     }
-// }
+pub fn new_getlastlog_query() -> (Query, Receiver<Vec<u8>>) {
+    let (tx, rx) : (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    (Query::GetLastLog{ chan: tx }, rx)
+}
