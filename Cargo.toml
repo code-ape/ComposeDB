@@ -10,6 +10,7 @@ router = "*"
 rustc-serialize = "*"
 log = "*"
 env_logger = "*"
+time = "0.1"
 
 [lib]
 name = "composedb"
@@ -26,5 +27,5 @@ path = "example/simple_build.rs"
 
 
 [[bin]]
-name = "test_lmdbrs"
-path = "example/test.rs"
+name = "segfault"
+path = "example/reproduce_segfault.rs"

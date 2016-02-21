@@ -11,6 +11,7 @@ use router::Router;
 use lmdb::EnvBuilder;
 use server::routes::{get_value,set_value,ping};
 use db::worker::WorkerPool;
+use core::db::DB;
 use core::query::{Query, run_query};//, gen_run_query};
 
 
@@ -21,15 +22,15 @@ pub fn run() {
 
 
     let path = Path::new("composedb_data");
-    let db_env = Arc::new(EnvBuilder::new().open(&path, 0o777).unwrap());
-    let stale_readers = db_env.reader_check().unwrap();
-    debug!("Removed {} stale readers", stale_readers);
+    //let db = Arc::new(DB::new(path));
+    let db = DB::new(path);
+
 
     let num_workers = 3;
     let worker_queue_size = 2;
 
     //let run_query = Arc::new(gen_run_query(db_env));
-    let run_query = move |q: Box<Query>| run_query(q, db_env.clone());
+    let run_query = move |q: Box<Query>| run_query(q, db.clone());
 
     let mut pool = WorkerPool::new(num_workers, worker_queue_size,
         out_ch, run_query);
