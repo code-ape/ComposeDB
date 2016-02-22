@@ -3,6 +3,8 @@ extern crate lmdb_rs as lmdb;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::collections::BTreeMap;
+
 use rustc_serialize::json;
 use lmdb::{EnvBuilder, DbFlags};
 use lmdb::core::{Environment, DbHandle, MdbResult};
@@ -10,6 +12,7 @@ use lmdb::traits::FromMdbValue;
 
 use core::action_log::{ActionLogFactory,ActionLogEntry};
 use core::query::{run_query, new_getlastlog_query};
+use core::data_interface::TransformBytes;
 
 pub type DbState<'a> = Option<DB<'a>>;
 
@@ -17,7 +20,9 @@ pub struct DB<'a> {
     path: &'a Path,
     pub env:  Environment,
     pub handle: DbHandle,
-    pub action_log_factory: ActionLogFactory
+    pub action_log_factory: ActionLogFactory,
+    pub name_to_id_map: BTreeMap<String,u16>,
+    pub id_to_trait_map: BTreeMap<u16,Box<TransformBytes>>
 }
 
 
@@ -35,7 +40,9 @@ impl<'a> DB<'a> {
             path: p,
             env: env,
             handle: db_handle,
-            action_log_factory: ActionLogFactory::new(0)
+            action_log_factory: ActionLogFactory::new(0),
+            name_to_id_map: BTreeMap::new(),
+            id_to_trait_map: BTreeMap::new()
         });
 
 

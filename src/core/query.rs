@@ -1,11 +1,13 @@
 use std::str;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender, Receiver};
+
 use lmdb::DbFlags;
 use rustc_serialize::json;
 
 use core::db::DB;
 use core::blob::DataBlob;
+use core::data_interface::TransformBytes;
 
 pub fn run_query(q: Box<Query>, db: Arc<DB>) -> Result<(),()> {
     match *q {
@@ -105,6 +107,7 @@ pub enum Query {
     GetLast{key: String, chan: Sender<Vec<u8>>},
     GetLastLog{chan: Sender<Vec<u8>>}
 }
+
 
 pub fn new_set_query(key: String, val: String) -> (Query, Receiver<Vec<u8>>) {
     let (tx, rx) : (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();

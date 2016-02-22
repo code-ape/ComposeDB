@@ -28,7 +28,7 @@ pub fn run() {
     let run_query = move |q: Box<Query>| run_query(q, db.clone());
 
     let mut pool = WorkerPool::new(num_workers, worker_queue_size,
-        out_ch, run_query);
+                                   out_ch, run_query);
 
     thread::Builder::new().name("Pool thread".to_string()).spawn(move || {
         pool.run();

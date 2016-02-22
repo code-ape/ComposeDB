@@ -1,6 +1,7 @@
 use core::data_interface::ToBytes;
 use rustc_serialize::{json,Encodable};
 
+
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct DataBlob {
     pub int_type: u32,

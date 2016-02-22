@@ -8,11 +8,11 @@ pub trait IntoBytes {
 }
 
 pub trait FromBytes {
-    fn from_data(byte_vec: &Vec<u8>) -> Self;
+    fn from_data(byte_vec: &[u8]) -> Self;
 }
 
-pub trait TransformBytes {
-    fn transform_data(byte_vec: Vec<u8>) -> Self;
+pub trait TransformBytes : Send + Sync {
+    fn transform_data(&self, byte_vec: Vec<u8>);
 }
 
 impl ToBytes for String {
