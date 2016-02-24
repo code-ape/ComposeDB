@@ -8,7 +8,7 @@ use env_logger;
 use iron::prelude::*;
 use router::Router;
 
-use server::routes::{get_value,set_value,ping};
+use server::routes::{get_handle,post_handle,ping};
 use db::worker::WorkerPool;
 use core::db::DB;
 use core::query::{Query, run_query};
@@ -38,9 +38,10 @@ pub fn run() {
 
     let in_ch_2 = Mutex::new(in_ch.clone());
     let in_ch_3 = Mutex::new(in_ch.clone());
+    let in_ch_4 = Mutex::new(in_ch.clone());
 
-    router.get("/json", move |r: &mut Request| get_value( r, &in_ch_2 ));
-    router.post("/json/set", move |r: &mut Request| set_value( r, &in_ch_3 ));
+    router.get("/json", move |r: &mut Request| get_handle( r, &in_ch_2 ));
+    router.post("/json", move |r: &mut Request| post_handle( r, &in_ch_3 ));
     router.get("/ping", move |r: &mut Request| ping(r));
 
     info!("Starting ComposeDB.");

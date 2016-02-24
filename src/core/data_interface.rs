@@ -1,4 +1,11 @@
 
+
+pub trait Serializable : Send + Sync {
+    fn get_name(&self) -> String;
+    // fn encode(&self) -> String;
+    // fn decode(String) -> Self;
+}
+
 pub trait ToBytes {
     fn to_data<'a>(&'a self) -> Vec<u8>;
 }

@@ -12,7 +12,7 @@ use lmdb::traits::FromMdbValue;
 
 use core::action_log::{ActionLogFactory,ActionLogEntry};
 use core::query::{run_query, new_getlastlog_query};
-use core::data_interface::TransformBytes;
+use core::data_interface::Serializable;
 
 pub type DbState<'a> = Option<DB<'a>>;
 
@@ -22,7 +22,8 @@ pub struct DB<'a> {
     pub handle: DbHandle,
     pub action_log_factory: ActionLogFactory,
     pub name_to_id_map: BTreeMap<String,u16>,
-    pub id_to_trait_map: BTreeMap<u16,Box<TransformBytes>>
+    pub id_to_trait_map: BTreeMap<u16,Box<Serializable>>
+    //pub id_to_trait_map: BTreeMap<u16,Box<Fn<T>(&str)->T>>
 }
 
 

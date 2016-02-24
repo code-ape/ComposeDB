@@ -6,30 +6,34 @@ use rustc_serialize::{json,Encodable};
 pub struct DataBlob {
     pub int_type: u32,
     pub version: u64,
+    pub log_number: u64,
     pub data: Vec<u8>
 }
 
 impl DataBlob {
-    pub fn new_from_struct<T: Encodable>(int_type: u32, version: u64, data: T) -> DataBlob {
+    pub fn new_from_struct<T: Encodable>(int_type: u32, version: u64, log_number: u64, data: T) -> DataBlob {
         DataBlob {
             int_type: int_type,
             version: version,
+            log_number: log_number,
             data: json::encode(&data).unwrap().into_bytes()
         }
     }
-    pub fn new_from_vec(int_type: u32, version: u64, data: Vec<u8>) -> DataBlob {
+    pub fn new_from_vec(int_type: u32, version: u64, log_number: u64, data: Vec<u8>) -> DataBlob {
         DataBlob {
             int_type: int_type,
             version: version,
+            log_number: log_number,
             data: data
         }
     }
 }
 
-fn to_blob<T: ToBytes>(int_type: u32, version: u64, thing: T) -> DataBlob {
+fn to_blob<T: ToBytes>(int_type: u32, version: u64, log_number: u64, thing: T) -> DataBlob {
     DataBlob {
         int_type: int_type,
         version: version,
+        log_number: log_number,
         data: thing.to_data()
     }
 }

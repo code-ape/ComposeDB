@@ -12,6 +12,7 @@ log = "*"
 env_logger = "*"
 time = "0.1"
 
+
 [lib]
 name = "composedb"
 path = "src/lib.rs"
@@ -24,8 +25,3 @@ path = "example/bare_build.rs"
 [[bin]]
 name = "composedb_simple"
 path = "example/simple_build.rs"
-
-
-[[bin]]
-name = "segfault"
-path = "example/reproduce_segfault.rs"

@@ -35,11 +35,14 @@ pub fn run_query(q: Box<Query>, db: Arc<DB>) -> Result<(),()> {
             debug!("Received SetQuery");
             let txn = db.env.new_transaction().unwrap();
             let action_log = db.action_log_factory.new_entry(key.clone(), 0);
-            let b : DataBlob = DataBlob::new_from_vec(0,0,value.clone().into_bytes());
+            let b : DataBlob = DataBlob::new_from_vec(0,0,0,value.clone().into_bytes());
+            let action_log_key = action_log.gen_key();
+            let action_log_val = action_log.to_json();
+            let action_log_blob = DataBlob::new_from_vec(0,0,0,action_log_val.into_bytes());
             {
                 let db_ref = txn.bind(&(db.handle));
                 db_ref.set(&*key, &json::encode(&b).unwrap()).unwrap();
-                db_ref.set(&action_log.gen_key(), &action_log.to_json()).unwrap();
+                db_ref.set(&action_log_key, &json::encode(&action_log_blob).unwrap()).unwrap();
             }
 
             match txn.commit() {
