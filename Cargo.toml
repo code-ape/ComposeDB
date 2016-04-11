@@ -1,0 +1,27 @@
+[package]
+name = "composedb"
+version = "0.1.0"
+authors = ["ferris"]
+
+[dependencies]
+lmdb-rs = "0.6.0"
+iron = "*"
+router = "*"
+rustc-serialize = "*"
+log = "*"
+env_logger = "*"
+time = "0.1"
+
+
+[lib]
+name = "composedb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "composedb_bare"
+path = "example/bare_build.rs"
+
+
+[[bin]]
+name = "composedb_simple"
+path = "example/simple_build.rs"
